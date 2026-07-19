@@ -1,0 +1,14 @@
+{
+  "name": "chronovault",
+  "version": "1.0.0",
+  "description": "Arc Testnet uzerinde zaman kilitli mesaj kapsulu dApp'i",
+  "scripts": {
+    "compile": "hardhat compile",
+    "deploy": "hardhat run scripts/deploy.js --network arcTestnet"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.0",
+    "dotenv": "^16.4.5"
+  }
+}

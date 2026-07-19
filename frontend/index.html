@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ChronoVault — Time-Locked Messages on Arc</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.0/dist/ethers.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f2f66;
+    --bg-elevated: #123877;
+    --surface: #164189;
+    --surface-2: #1a4a9a;
+    --border: #2c5fb0;
+    --text: #f4f7ff;
+    --text-muted: #b9c9ee;
+    --text-faint: #7f97cf;
+    --accent: #c9a15c;
+    --accent-bright: #e0bd7d;
+    --accent-soft: rgba(201, 161, 92, 0.12);
+    --success: #2fae83;
+    --success-soft: rgba(47, 174, 131, 0.13);
+    --error: #e5636a;
+    --error-soft: rgba(229, 99, 106, 0.12);
+    --locked: #5b6478;
+
+    --font-display: 'Fraunces', serif;
+    --font-body: 'IBM Plex Sans', -apple-system, sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(201,161,92,0.08), transparent 60%),
+      radial-gradient(1000px 600px at 100% 0%, rgba(56,120,220,0.12), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    line-height: 1.5;
+  }
+  a { color: inherit; }
+
+  ::selection { background: var(--accent-soft); color: var(--accent-bright); }
+
+  /* ---------- Layout shells ---------- */
+  .container { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+  .container-narrow { max-width: 720px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- Nav ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(11, 15, 26, 0.86);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-inner {
+    max-width: 1040px; margin: 0 auto; padding: 16px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 600; font-size: 19px; letter-spacing: 0.01em; }
+  .brand-mark {
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 1.5px solid var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .brand-mark::before {
+    content: ""; position: absolute; width: 1px; height: 8px; background: var(--accent); top: 4px; left: 50%; transform: translateX(-50%);
+  }
+  .brand-mark::after {
+    content: ""; position: absolute; width: 6px; height: 1px; background: var(--accent); top: 50%; left: 50%; transform: translate(-50%,-50%) rotate(35deg);
+  }
+  .nav-links { display: flex; gap: 28px; font-size: 14px; color: var(--text-muted); }
+  .nav-links a { text-decoration: none; transition: color 0.15s; }
+  .nav-links a:hover { color: var(--text); }
+  .nav-cta {
+    font-size: 13px; font-weight: 500; padding: 9px 16px; border-radius: 8px;
+    background: var(--surface-2); border: 1px solid var(--border); cursor: pointer; color: var(--text);
+  }
+  @media (max-width: 640px) { .nav-links { display: none; } }
+
+  /* ---------- Hero ---------- */
+  .hero { padding: 88px 0 72px; position: relative; overflow: hidden; }
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--accent); display: flex; align-items: center; gap: 10px; margin-bottom: 22px;
+  }
+  .eyebrow::before { content: ""; width: 22px; height: 1px; background: var(--accent); }
+  .hero h1 {
+    font-family: var(--font-display); font-weight: 600; font-size: clamp(36px, 5.4vw, 60px);
+    line-height: 1.06; letter-spacing: -0.01em; margin: 0 0 22px; max-width: 780px;
+  }
+  .hero h1 em { font-style: italic; color: var(--accent-bright); font-weight: 500; }
+  .hero p.lead { font-size: 17px; color: var(--text-muted); max-width: 520px; margin: 0 0 34px; }
+  .hero-actions { display: flex; gap: 14px; flex-wrap: wrap; }
+
+  .btn-primary {
+    font-family: var(--font-body); font-weight: 600; font-size: 14.5px; padding: 13px 24px; border-radius: 9px;
+    background: linear-gradient(180deg, var(--accent-bright), var(--accent));
+    color: #1a1200; border: none; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.25) inset, 0 8px 24px rgba(201,161,92,0.15);
+  }
+  .btn-primary:hover { transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+  .btn-ghost {
+    font-family: var(--font-body); font-weight: 500; font-size: 14.5px; padding: 13px 22px; border-radius: 9px;
+    background: transparent; color: var(--text); border: 1px solid var(--border); cursor: pointer; text-decoration: none;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn-ghost:hover { border-color: var(--text-faint); }
+
+  /* Vault dial signature graphic */
+  .dial-wrap {
+    position: absolute; right: -60px; top: 40px; width: 420px; height: 420px;
+    opacity: 0.9; pointer-events: none;
+  }
+  @media (max-width: 900px) { .dial-wrap { display: none; } }
+
+  /* ---------- Section shell ---------- */
+  section { padding: 64px 0; border-top: 1px solid var(--border); }
+  .section-head { margin-bottom: 40px; }
+  .section-head .eyebrow { margin-bottom: 14px; }
+  .section-head h2 { font-family: var(--font-display); font-weight: 600; font-size: clamp(26px, 3.4vw, 34px); margin: 0 0 12px; letter-spacing: -0.01em; }
+  .section-head p { color: var(--text-muted); font-size: 15px; max-width: 560px; margin: 0; }
+
+  /* ---------- How it works ---------- */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  .step { background: var(--surface); padding: 28px 24px; }
+  .step-num { font-family: var(--font-mono); color: var(--accent); font-size: 13px; margin-bottom: 16px; }
+  .step h3 { font-family: var(--font-display); font-weight: 600; font-size: 18px; margin: 0 0 8px; }
+  .step p { color: var(--text-muted); font-size: 14px; margin: 0; }
+  @media (max-width: 720px) { .steps { grid-template-columns: 1fr; } }
+
+  /* ---------- App cards ---------- */
+  .app-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 26px;
+  }
+  .card-label {
+    font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-muted); margin: 0 0 18px; display: flex; align-items: center; justify-content: space-between;
+  }
+
+  #walletInfo { font-family: var(--font-mono); font-size: 13px; color: var(--text-muted); text-align: left; word-break: break-all; margin-top: 12px; }
+  #walletInfo.connected { color: var(--success); }
+
+  textarea, input[type="datetime-local"], input[type="text"] {
+    width: 100%; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); padding: 13px; font-size: 14px; font-family: var(--font-body); margin-bottom: 10px;
+  }
+  input[type="text"] { font-family: var(--font-mono); font-size: 13px; }
+  textarea { min-height: 96px; resize: vertical; }
+  textarea::placeholder { color: var(--text-faint); }
+  .char-count { font-size: 12px; color: var(--text-faint); text-align: right; margin-top: -6px; margin-bottom: 14px; font-family: var(--font-mono); }
+
+  .btn-block { width: 100%; }
+
+  .type-toggle { display: flex; gap: 8px; margin-bottom: 10px; }
+  .type-btn {
+    flex: 1; padding: 10px; border-radius: 9px; border: 1px solid var(--border);
+    background: var(--bg-elevated); color: var(--text-muted); font-family: var(--font-body);
+    font-size: 13.5px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+  }
+  .type-btn.active { border-color: var(--accent); color: var(--accent-bright); background: var(--accent-soft); }
+
+  .badges-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  @media (max-width: 480px) { .badges-grid { grid-template-columns: 1fr; } }
+  .badge-item {
+    display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 11px;
+    border: 1px solid var(--border); background: var(--bg-elevated);
+  }
+  .badge-item.earned { border-color: var(--accent); background: var(--accent-soft); }
+  .badge-icon { font-size: 24px; opacity: 0.35; filter: grayscale(1); }
+  .badge-item.earned .badge-icon { opacity: 1; filter: none; }
+  .badge-text h4 { margin: 0 0 2px; font-size: 13.5px; font-weight: 600; color: var(--text-muted); }
+  .badge-item.earned .badge-text h4 { color: var(--text); }
+  .badge-text p { margin: 0; font-size: 11.5px; color: var(--text-faint); }
+
+  #formMsg { font-size: 13.5px; margin-top: 12px; min-height: 18px; }
+  .msg-success { color: var(--success); }
+  .msg-error { color: var(--error); }
+
+  .capsule {
+    border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 12px; background: var(--bg-elevated);
+  }
+  .capsule:last-child { margin-bottom: 0; }
+  .capsule-top { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+  .capsule-creator { font-family: var(--font-mono); }
+  .capsule-status { font-weight: 600; padding: 3px 10px; border-radius: 20px; font-size: 10.5px; letter-spacing: 0.04em; font-family: var(--font-mono); }
+  .status-locked { background: rgba(91,100,120,0.18); color: var(--locked); }
+  .status-unlocked { background: var(--success-soft); color: var(--success); }
+  .capsule-body { font-size: 14.5px; line-height: 1.55; }
+  .capsule-body.locked-text { color: var(--text-muted); font-style: italic; }
+  .capsule-time { font-size: 11.5px; color: var(--text-faint); margin-top: 10px; font-family: var(--font-mono); }
+
+  .empty-state { text-align: center; color: var(--text-muted); font-size: 13.5px; padding: 28px 10px; }
+  .btn-refresh {
+    background: none; border: 1px solid var(--border); color: var(--text-muted); border-radius: 7px;
+    padding: 5px 12px; font-size: 11.5px; cursor: pointer; font-family: var(--font-mono);
+  }
+  .btn-refresh:hover { color: var(--text); border-color: var(--text-faint); }
+
+  .integrity-note {
+    display: flex; gap: 12px; align-items: flex-start; background: var(--accent-soft); border: 1px solid rgba(201,161,92,0.25);
+    border-radius: 10px; padding: 14px 16px; font-size: 13px; color: var(--text-muted); margin-top: 20px;
+  }
+  .integrity-note strong { color: var(--accent-bright); }
+
+  /* ---------- About Arc ---------- */
+  .about-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 48px; align-items: start; }
+  @media (max-width: 800px) { .about-grid { grid-template-columns: 1fr; gap: 32px; } }
+  .about-copy p { color: var(--text-muted); font-size: 15px; margin: 0 0 16px; }
+  .about-copy a.inline-link { color: var(--accent-bright); text-decoration: underline; text-decoration-color: rgba(224,189,125,0.35); text-underline-offset: 3px; }
+
+  .fact-list { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--border); }
+  .fact { display: flex; justify-content: space-between; gap: 16px; padding: 15px 0; border-bottom: 1px solid var(--border); }
+  .fact dt { font-size: 13.5px; color: var(--text-muted); }
+  .fact dd { margin: 0; font-family: var(--font-mono); font-size: 13.5px; color: var(--text); text-align: right; }
+
+  .social-row { display: flex; gap: 12px; margin-top: 26px; }
+  .social-btn {
+    display: flex; align-items: center; gap: 9px; padding: 11px 18px; border-radius: 9px;
+    background: var(--surface-2); border: 1px solid var(--border); text-decoration: none; color: var(--text);
+    font-size: 13.5px; font-weight: 500; transition: border-color 0.15s;
+  }
+  .social-btn:hover { border-color: var(--accent); }
+  .social-btn svg { width: 16px; height: 16px; }
+
+  .built-on-arc {
+    display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-faint);
+    font-family: var(--font-mono); border: 1px solid var(--border); padding: 7px 14px; border-radius: 20px; margin-top: 28px;
+  }
+  .built-on-arc .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+
+  /* ---------- Footer ---------- */
+  footer { border-top: 1px solid var(--border); padding: 36px 0; }
+  .footer-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+  .footer-row .brand { font-size: 15px; }
+  .footer-links { display: flex; gap: 22px; font-size: 13px; color: var(--text-muted); }
+  .footer-links a { text-decoration: none; }
+  .footer-links a:hover { color: var(--text); }
+  .disclaimer { font-size: 12px; color: var(--text-faint); margin-top: 20px; max-width: 640px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <div class="brand"><span class="brand-mark"></span>ChronoVault</div>
+    <div class="nav-links">
+      <a href="#app">Vault</a>
+      <a href="#how">How it works</a>
+      <a href="#about-arc">About Arc</a>
+    </div>
+    <button class="nav-cta" onclick="document.getElementById('app').scrollIntoView({behavior:'smooth'})">Launch app</button>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="container">
+    <div class="eyebrow">Time-locked messages · Arc Testnet</div>
+    <h1>Write today.<br>Deliver it <em>whenever time says so.</em></h1>
+    <p class="lead">ChronoVault locks a message on-chain until a date you choose. No one — not even you — can read it early. The contract itself enforces the wait.</p>
+    <div class="hero-actions">
+      <button class="btn-primary" onclick="document.getElementById('app').scrollIntoView({behavior:'smooth'})">Open the vault</button>
+      <button class="btn-ghost" id="addNetworkBtn">
+        <span style="color:var(--accent)">+</span> Add Arc Testnet to wallet
+      </button>
+      <a class="btn-ghost" href="#how">See how it works ↓</a>
+    </div>
+    <div id="addNetworkMsg" style="font-size:13px; margin-top:14px; min-height:18px;"></div>
+  </div>
+  <div class="dial-wrap">
+    <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="200" cy="200" r="150" fill="none" stroke="#262e45" stroke-width="1.5"/>
+      <circle cx="200" cy="200" r="118" fill="none" stroke="#262e45" stroke-width="1"/>
+      <g stroke="#c9a15c" stroke-width="1.5" opacity="0.55">
+        <line x1="200" y1="50" x2="200" y2="66"/>
+        <line x1="200" y1="334" x2="200" y2="350"/>
+        <line x1="50" y1="200" x2="66" y2="200"/>
+        <line x1="334" y1="200" x2="350" y2="200"/>
+      </g>
+      <g stroke="#3a4360" stroke-width="1">
+        <line x1="200" y1="52" x2="200" y2="60" transform="rotate(30 200 200)"/>
+        <line x1="200" y1="52" x2="200" y2="60" transform="rotate(60 200 200)"/>
+        <line x1="200" y1="52" x2="200" y2="60" transform="rotate(120 200 200)"/>
+        <line x1="200" y1="52" x2="200" y2="60" transform="rotate(150 200 200)"/>
+        <line x1="200" y1="52" x2="200" y2="60" transform="rotate(210 200 200)"/>
+        <line x1="200" y1="52" x2="200" y2="60" transform="rotate(240 200 200)"/>
+        <line x1="200" y1="52" x2="200" y2="60" transform="rotate(300 200 200)"/>
+        <line x1="200" y1="52" x2="200" y2="60" transform="rotate(330 200 200)"/>
+      </g>
+      <line x1="200" y1="200" x2="200" y2="98" stroke="#e0bd7d" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="200" y1="200" x2="255" y2="200" stroke="#e0bd7d" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+      <circle cx="200" cy="200" r="5" fill="#e0bd7d"/>
+    </svg>
+  </div>
+</header>
+
+<section id="how">
+  <div class="container">
+    <div class="section-head">
+      <div class="eyebrow">Process</div>
+      <h2>Three steps, enforced by code</h2>
+      <p>There's no admin key that can open a capsule early — the unlock condition lives in the contract, not in a promise.</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">01</div>
+        <h3>Write</h3>
+        <p>Compose a message and pick the date it should become readable — a day, a month, a year from now.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">02</div>
+        <h3>Lock</h3>
+        <p>Sign one transaction. The message is committed to Arc Testnet and sealed until that timestamp is reached.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">03</div>
+        <h3>Reveal</h3>
+        <p>Once the unlock time passes, the contract releases the message to anyone who asks — publicly and permanently.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="app">
+  <div class="container-narrow">
+    <div class="section-head">
+      <div class="eyebrow">The vault</div>
+      <h2>Connect a wallet and try it</h2>
+      <p>Runs on Arc Testnet. You'll need a small amount of testnet USDC to cover gas — get some free from the Circle faucet.</p>
+    </div>
+
+    <div class="app-grid">
+      <div class="card" id="connectCard">
+        <div class="card-label">Wallet</div>
+        <button class="btn-primary btn-block" id="connectBtn">Connect wallet</button>
+        <div id="walletInfo"></div>
+      </div>
+
+      <div class="card" id="badgesCard" style="display:none">
+        <div class="card-label">Your badges</div>
+        <div class="badges-grid" id="badgesGrid"></div>
+      </div>
+
+      <div class="card" id="createCard" style="display:none">
+        <div class="card-label">New capsule</div>
+        <textarea id="messageInput" maxlength="500" placeholder="Write the message you want to lock away..."></textarea>
+        <div class="char-count"><span id="charCount">0</span> / 500</div>
+        <input type="datetime-local" id="unlockInput" />
+
+        <div class="type-toggle">
+          <button type="button" class="type-btn active" id="typePublicBtn" data-type="public">🌍 Public</button>
+          <button type="button" class="type-btn" id="typePrivateBtn" data-type="private">🔒 Private</button>
+        </div>
+        <input type="text" id="recipientInput" placeholder="Recipient wallet address (0x...)" style="display:none" />
+
+        <button class="btn-primary btn-block" id="createBtn">Lock capsule</button>
+        <div id="formMsg"></div>
+        <div class="integrity-note">
+          <span>🔒</span>
+          <span><strong>How the lock works:</strong> the message is written on-chain when you create the capsule, but the contract's <code>getMessage</code> function refuses to return it until <code>block.timestamp</code> reaches your chosen date — and for private capsules, only the sender or recipient address can retrieve it. This is enforced at the contract level, not just hidden in the interface.</span>
+        </div>
+      </div>
+
+      <div class="card" id="listCard">
+        <div class="card-label">All capsules <button class="btn-refresh" id="refreshBtn">Refresh</button></div>
+        <div id="capsuleList"><div class="empty-state">Loading…</div></div>
+      </div>
+    </div>
+
+    <p style="text-align:center; font-size:12.5px; color:var(--text-faint); margin-top:16px;">
+      Capsules are public on-chain data — anyone can read them here without connecting a wallet.<br>
+      A wallet is only needed to create a new capsule.
+    </p>
+  </div>
+</section>
+
+<section id="about-arc">
+  <div class="container">
+    <div class="about-grid">
+      <div class="about-copy">
+        <div class="eyebrow">About the network</div>
+        <h2 style="font-family:var(--font-display);font-weight:600;font-size:clamp(24px,3vw,30px);margin:0 0 18px;letter-spacing:-0.01em;">Built on Arc</h2>
+        <p>Arc is an open, EVM-compatible Layer-1 blockchain developed by Circle — the company behind USDC. It's designed as financial infrastructure: predictable, dollar-denominated fees, sub-second transaction finality, and native support for stablecoins as gas.</p>
+        <p>ChronoVault is an independent, community-built project running on Arc's public testnet. It isn't an official Circle or Arc product — just one small example of what you can build on the network.</p>
+        <p>Want to build your own? Start at <a class="inline-link" href="https://docs.arc.network" target="_blank" rel="noopener">docs.arc.network</a>.</p>
+
+        <div class="social-row">
+          <a class="social-btn" href="https://x.com/arc" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.9 2H22l-7.6 8.7L23.3 22H16.9l-5-6.5-5.7 6.5H2.9l8.1-9.3L2 2h6.6l4.5 6 5.8-6Zm-1.1 18h1.7L7.3 3.9H5.5L17.8 20Z"/></svg>
+            Follow on X
+          </a>
+          <a class="social-btn" href="https://discord.com/invite/buildonarc" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.3 5.4A18 18 0 0 0 15.9 4c-.2.4-.4.9-.6 1.3a16.7 16.7 0 0 0-6.6 0c-.2-.4-.4-.9-.6-1.3a18 18 0 0 0-4.4 1.4C1 9.9.3 14.3.6 18.6a18 18 0 0 0 5.5 2.8c.4-.6.8-1.3 1.1-2a11.8 11.8 0 0 1-1.8-.9l.4-.3a12.9 12.9 0 0 0 11 0l.4.3c-.6.3-1.2.6-1.8.9.3.7.7 1.4 1.1 2a18 18 0 0 0 5.5-2.8c.4-5-.9-9.4-3.7-13.2ZM8.7 15.9c-1 0-1.9-1-1.9-2.2s.8-2.2 1.9-2.2 1.9 1 1.9 2.2-.9 2.2-1.9 2.2Zm6.6 0c-1 0-1.9-1-1.9-2.2s.8-2.2 1.9-2.2 1.9 1 1.9 2.2-.8 2.2-1.9 2.2Z"/></svg>
+            Join Discord
+          </a>
+        </div>
+
+        <div class="built-on-arc"><span class="dot"></span> Live on Arc Testnet · Chain ID 5042002</div>
+      </div>
+
+      <div class="about-facts">
+        <dl class="fact-list">
+          <div class="fact"><dt>Network</dt><dd>Arc Testnet</dd></div>
+          <div class="fact"><dt>Chain ID</dt><dd>5042002</dd></div>
+          <div class="fact"><dt>Gas token</dt><dd>USDC (native)</dd></div>
+          <div class="fact"><dt>Finality</dt><dd>Sub-second</dd></div>
+          <div class="fact"><dt>Compatibility</dt><dd>EVM</dd></div>
+          <div class="fact"><dt>Explorer</dt><dd><a class="inline-link" style="font-family:var(--font-mono)" href="https://testnet.arcscan.app" target="_blank" rel="noopener">arcscan.app ↗</a></dd></div>
+          <div class="fact"><dt>Faucet</dt><dd><a class="inline-link" style="font-family:var(--font-mono)" href="https://faucet.circle.com" target="_blank" rel="noopener">faucet.circle.com ↗</a></dd></div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div class="footer-row">
+      <div class="brand"><span class="brand-mark"></span>ChronoVault</div>
+      <div class="footer-links">
+        <a href="https://testnet.arcscan.app" target="_blank" rel="noopener">Explorer</a>
+        <a href="https://x.com/arc" target="_blank" rel="noopener">X</a>
+        <a href="https://discord.com/invite/buildonarc" target="_blank" rel="noopener">Discord</a>
+        <a href="https://docs.arc.network" target="_blank" rel="noopener">Arc Docs</a>
+      </div>
+    </div>
+    <p class="disclaimer">ChronoVault is an independent demo project built on Arc Testnet and is not affiliated with or endorsed by Circle. Testnet assets have no real-world value. Messages, once unlocked, are permanent and publicly readable on-chain.</p>
+  </div>
+</footer>
+
+<script>
+  // Yeniden deploy sonrasi bu adresi degistir
+  const CONTRACT_ADDRESS = "0xA5625c2876D0D9E8737438E2833493AAb93cFEb1";
+
+  const ABI = [
+    "function createCapsule(string message, uint256 unlockTime, address recipient) external",
+    "function totalCapsules() external view returns (uint256)",
+    "function getCapsuleInfo(uint256 id) external view returns (address creator, address recipient, uint256 unlockTime, uint256 createdAt, bool isUnlocked, bool isPrivate)",
+    "function getMessage(uint256 id) external view returns (string)",
+    "function getBadges(address user) external view returns (bool[4])"
+  ];
+
+  const ARC_TESTNET = {
+    chainId: "0x4CEF52",
+    chainName: "Arc Testnet",
+    nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
+    rpcUrls: ["https://rpc.testnet.arc.network"],
+    blockExplorerUrls: ["https://testnet.arcscan.app"]
+  };
+
+  const connectBtn = document.getElementById("connectBtn");
+  const walletInfo = document.getElementById("walletInfo");
+  const createCard = document.getElementById("createCard");
+  const listCard = document.getElementById("listCard");
+  const badgesCard = document.getElementById("badgesCard");
+  const badgesGrid = document.getElementById("badgesGrid");
+  const messageInput = document.getElementById("messageInput");
+  const charCount = document.getElementById("charCount");
+  const unlockInput = document.getElementById("unlockInput");
+  const typePublicBtn = document.getElementById("typePublicBtn");
+  const typePrivateBtn = document.getElementById("typePrivateBtn");
+  const recipientInput = document.getElementById("recipientInput");
+  const createBtn = document.getElementById("createBtn");
+  const formMsg = document.getElementById("formMsg");
+  const capsuleList = document.getElementById("capsuleList");
+  const refreshBtn = document.getElementById("refreshBtn");
+
+  let capsuleType = "public";
+
+  const BADGE_META = [
+    { icon: "🌱", name: "First Capsule", desc: "Locked your first message" },
+    { icon: "🏛️", name: "Decade Vault", desc: "Created 10+ capsules" },
+    { icon: "⏳", name: "Time Traveler", desc: "Locked one for 1+ year" },
+    { icon: "🌟", name: "Founding Member", desc: "Among the first 20 capsules" },
+  ];
+
+  typePublicBtn.onclick = () => {
+    capsuleType = "public";
+    typePublicBtn.classList.add("active");
+    typePrivateBtn.classList.remove("active");
+    recipientInput.style.display = "none";
+  };
+  typePrivateBtn.onclick = () => {
+    capsuleType = "private";
+    typePrivateBtn.classList.add("active");
+    typePublicBtn.classList.remove("active");
+    recipientInput.style.display = "block";
+  };
+
+  let provider, signer, contract, userAddress;
+
+  // Salt-okunur baglanti: cuzdan bagli olmasa bile kapsulleri okuyabilmek icin
+  const readProvider = new ethers.JsonRpcProvider(ARC_TESTNET.rpcUrls[0]);
+  const readContract = new ethers.Contract(CONTRACT_ADDRESS, ABI, readProvider);
+
+  // RPC gecici olarak limitlendiginde otomatik olarak birkac kez tekrar dener
+  async function withRetry(fn, retries = 3, delayMs = 1200) {
+    let lastErr;
+    for (let i = 0; i < retries; i++) {
+      try {
+        return await fn();
+      } catch (err) {
+        lastErr = err;
+        if (i < retries - 1) {
+          await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+        }
+      }
+    }
+    throw lastErr;
+  }
+
+  messageInput.addEventListener("input", () => {
+    charCount.textContent = messageInput.value.length;
+  });
+
+  // Sayfa acilir acilmaz, cuzdan bagli olmasa bile kapsulleri yukle
+  window.addEventListener("DOMContentLoaded", () => {
+    loadCapsules();
+  });
+
+  const addNetworkBtn = document.getElementById("addNetworkBtn");
+  const addNetworkMsg = document.getElementById("addNetworkMsg");
+
+  addNetworkBtn.onclick = async () => {
+    if (!window.ethereum) {
+      addNetworkMsg.textContent = "No wallet found. Please install MetaMask first.";
+      addNetworkMsg.className = "msg-error";
+      return;
+    }
+    addNetworkBtn.disabled = true;
+    try {
+      await window.ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: [ARC_TESTNET],
+      });
+      addNetworkMsg.textContent = "✅ Arc Testnet added — check your wallet's network list.";
+      addNetworkMsg.className = "msg-success";
+    } catch (err) {
+      console.error(err);
+      if (err.code === 4001) {
+        addNetworkMsg.textContent = "Request cancelled.";
+      } else {
+        addNetworkMsg.textContent = "Couldn't add network: " + (err.message || err);
+      }
+      addNetworkMsg.className = "msg-error";
+    } finally {
+      addNetworkBtn.disabled = false;
+    }
+  };
+
+  connectBtn.onclick = async () => {
+    if (!window.ethereum) {
+      walletInfo.textContent = "No wallet found. Please install MetaMask first.";
+      return;
+    }
+    connectBtn.disabled = true;
+    connectBtn.textContent = "Connecting…";
+
+    try {
+      try {
+        await window.ethereum.request({ method: "wallet_addEthereumChain", params: [ARC_TESTNET] });
+      } catch (e) { console.warn(e); }
+
+      await window.ethereum.request({ method: "eth_requestAccounts" });
+
+      provider = new ethers.BrowserProvider(window.ethereum);
+      signer = await provider.getSigner();
+      userAddress = await signer.getAddress();
+      contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+      walletInfo.textContent = "Connected: " + userAddress;
+      walletInfo.classList.add("connected");
+      connectBtn.textContent = "Connected";
+      createCard.style.display = "block";
+      badgesCard.style.display = "block";
+
+      await loadBadges();
+      await loadCapsules();
+    } catch (err) {
+      console.error(err);
+      walletInfo.textContent = "Connection error: " + (err.message || err);
+      connectBtn.disabled = false;
+      connectBtn.textContent = "Connect wallet";
+    }
+  };
+
+  createBtn.onclick = async () => {
+    const message = messageInput.value.trim();
+    const unlockLocal = unlockInput.value;
+
+    if (!message) {
+      formMsg.textContent = "Message can't be empty.";
+      formMsg.className = "msg-error";
+      return;
+    }
+    if (!unlockLocal) {
+      formMsg.textContent = "Pick an unlock date.";
+      formMsg.className = "msg-error";
+      return;
+    }
+
+    const unlockTimestamp = Math.floor(new Date(unlockLocal).getTime() / 1000);
+    const nowTimestamp = Math.floor(Date.now() / 1000);
+
+    if (unlockTimestamp <= nowTimestamp) {
+      formMsg.textContent = "Unlock date must be in the future.";
+      formMsg.className = "msg-error";
+      return;
+    }
+
+    let recipientAddress = ethers.ZeroAddress;
+    if (capsuleType === "private") {
+      const raw = recipientInput.value.trim();
+      if (!raw || !ethers.isAddress(raw)) {
+        formMsg.textContent = "Enter a valid recipient wallet address for a private capsule.";
+        formMsg.className = "msg-error";
+        return;
+      }
+      recipientAddress = raw;
+    }
+
+    createBtn.disabled = true;
+    createBtn.textContent = "Processing…";
+    formMsg.textContent = "Transaction sent, waiting for confirmation…";
+    formMsg.className = "";
+
+    try {
+      const tx = await contract.createCapsule(message, unlockTimestamp, recipientAddress);
+      await tx.wait();
+
+      formMsg.textContent = "🎉 Capsule locked successfully.";
+      formMsg.className = "msg-success";
+      messageInput.value = "";
+      unlockInput.value = "";
+      recipientInput.value = "";
+      charCount.textContent = "0";
+
+      await loadBadges();
+      await loadCapsules();
+    } catch (err) {
+      console.error(err);
+      formMsg.textContent = "Error: " + (err.reason || err.message || err);
+      formMsg.className = "msg-error";
+    } finally {
+      createBtn.disabled = false;
+      createBtn.textContent = "Lock capsule";
+    }
+  };
+
+  refreshBtn.onclick = loadCapsules;
+
+  function shortenAddress(addr) {
+    return addr.slice(0, 6) + "…" + addr.slice(-4);
+  }
+
+  function formatDate(unixTs) {
+    return new Date(Number(unixTs) * 1000).toLocaleString("en-US", {
+      year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
+    });
+  }
+
+  async function loadBadges() {
+    if (!contract || !userAddress) return;
+    try {
+      const earned = await withRetry(() => contract.getBadges(userAddress));
+      let html = "";
+      BADGE_META.forEach((b, i) => {
+        const isEarned = earned[i];
+        html += '<div class="badge-item ' + (isEarned ? 'earned' : '') + '">' +
+          '<div class="badge-icon">' + b.icon + '</div>' +
+          '<div class="badge-text"><h4>' + b.name + '</h4><p>' + b.desc + '</p></div>' +
+        '</div>';
+      });
+      badgesGrid.innerHTML = html;
+    } catch (err) {
+      console.error(err);
+      badgesGrid.innerHTML = '<div class="empty-state">Couldn\'t load badges right now.</div>';
+    }
+  }
+
+  async function loadCapsules() {
+    capsuleList.innerHTML = '<div class="empty-state">Loading…</div>';
+    try {
+      const activeContract = contract || readContract;
+
+      const total = await withRetry(() => activeContract.totalCapsules());
+      const count = Number(total);
+
+      if (count === 0) {
+        capsuleList.innerHTML = '<div class="empty-state">No capsules yet. Be the first to lock one away.</div>';
+        return;
+      }
+
+      let html = "";
+      for (let i = count - 1; i >= 0; i--) {
+        const info = await withRetry(() => activeContract.getCapsuleInfo(i));
+        const [creator, recipient, unlockTime, createdAt, isUnlocked, isPrivate] = info;
+
+        const lowerUser = userAddress ? userAddress.toLowerCase() : null;
+        const canAccess = !isPrivate ||
+          (lowerUser && (lowerUser === creator.toLowerCase() || lowerUser === recipient.toLowerCase()));
+
+        let bodyHtml;
+        if (isPrivate && !canAccess) {
+          bodyHtml = '<div class="capsule-body locked-text">🔒 Private capsule — only visible to the sender and recipient. Connect the right wallet to view.</div>';
+        } else if (isUnlocked) {
+          try {
+            const msg = await withRetry(() => activeContract.getMessage(i));
+            bodyHtml = '<div class="capsule-body">' + escapeHtml(msg) + '</div>';
+          } catch (e) {
+            bodyHtml = '<div class="capsule-body locked-text">Message temporarily unavailable — the network is busy, try Refresh in a moment.</div>';
+          }
+        } else {
+          bodyHtml = '<div class="capsule-body locked-text">🔒 Still locked. Opens ' + formatDate(unlockTime) + '.</div>';
+        }
+
+        const typeTag = isPrivate ? '<span class="capsule-status status-locked" style="margin-right:6px">PRIVATE</span>' : '';
+
+        html += '<div class="capsule">' +
+            '<div class="capsule-top">' +
+              '<span class="capsule-creator">' + shortenAddress(creator) + '</span>' +
+              '<span>' + typeTag +
+              '<span class="capsule-status ' + (isUnlocked ? 'status-unlocked' : 'status-locked') + '">' +
+                (isUnlocked ? 'UNLOCKED' : 'LOCKED') +
+              '</span></span>' +
+            '</div>' +
+            bodyHtml +
+            '<div class="capsule-time">Created ' + formatDate(createdAt) + ' · Unlocks ' + formatDate(unlockTime) + '</div>' +
+          '</div>';
+
+        // Ardisik istekler arasinda kucuk bir bekleme - RPC'yi yormamak icin
+        if (i > 0) await new Promise(r => setTimeout(r, 150));
+      }
+      capsuleList.innerHTML = html;
+    } catch (err) {
+      console.error(err);
+      capsuleList.innerHTML = '<div class="empty-state">The network is busy right now. <button class="btn-refresh" onclick="loadCapsules()" style="margin-left:6px">Try again</button></div>';
+    }
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+</script>
+</body>
+</html>
